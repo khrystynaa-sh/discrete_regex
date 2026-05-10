@@ -1,5 +1,8 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+import argparse
+
+
 
 
 class State(ABC):
@@ -27,7 +30,7 @@ class DotState(State):
 
 
 class AsciiState(State):
-    def __init__(self, symbol: str) -> None:
+    def __init__(self, symbol: str):
         super().__init__()
         self.symbol = symbol
 
@@ -55,48 +58,45 @@ class PlusState(State):
 
 
 class RegexFSM:
-    def __init__(self, regex_expr: str) -> None:
+    def __init__(self, pattern: str):
         self.start_state = StartState()
-        prev_state = self.start_state
+        prev = self.start_state
 
         i = 0
-        while i < len(regex_expr):
-            char = regex_expr[i]
+        while i < len(pattern):
+            char = pattern[i]
 
-            if i + 1 < len(regex_expr) and regex_expr[i + 1] in "*+":
-                op = regex_expr[i + 1]
-                base = self.__make_state(char)
+            if i + 1 < len(pattern) and pattern[i + 1] in "*+":
+                op = pattern[i + 1]
+                base = self._make_state(char)
                 if op == "*":
                     star = StarState(base)
-                    prev_state.next_states.append(star)
-                    prev_state.next_states.append(base)
+                    prev.next_states.append(star)
+                    prev.next_states.append(base)
                     base.next_states.append(star)
-                    prev_state = star
+                    prev = star
                 elif op == "+":
                     plus = PlusState(base)
-                    prev_state.next_states.append(base)
+                    prev.next_states.append(base)
                     base.next_states.append(plus)
                     plus.next_states.append(base)
-                    prev_state = plus
+                    prev = plus
                 i += 2
                 continue
-
-            state = self.__make_state(char)
-            prev_state.next_states.append(state)
-            prev_state = state
+            state = self._make_state(char)
+            prev.next_states.append(state)
+            prev = state
             i += 1
 
-        prev_state.next_states.append(TerminationState())
+        prev.next_states.append(TerminationState())
 
-    def __make_state(self, token: str) -> State:
+    def _make_state(self, token: str) -> State:
         if token == ".":
             return DotState()
-        elif token.isascii():
-            return AsciiState(token)
-        else:
-            raise ValueError("Unsupported character")
+        return AsciiState(token)
 
-    def check_string(self, input_str: str) -> bool:
+
+    def check_string(self, s: str) -> bool:
         visited = set()
 
         def dfs(state: State, idx: int) -> bool:
@@ -104,26 +104,34 @@ class RegexFSM:
                 return False
             visited.add((id(state), idx))
 
-            if isinstance(state, TerminationState) and idx == len(input_str):
-                return True
-            if idx < len(input_str):
+            if isinstance(state, TerminationState):
+                return idx == len(s)
+            if idx < len(s):
                 for nxt in state.next_states:
-                    if nxt.check_self(input_str[idx]):
+                    if nxt.check_self(s[idx]):
                         if dfs(nxt, idx + 1):
                             return True
             for nxt in state.next_states:
-                if dfs(nxt, idx):
-                    return True
+                if isinstance(nxt, (StarState, PlusState)):
+                    if dfs(nxt, idx):
+                        return True
 
             return False
 
         return dfs(self.start_state, 0)
 
 
-if __name__ == "__main__":
-    regex_pattern = "a*4.+hi"
-    regex_compiled = RegexFSM(regex_pattern)
 
-    print(regex_compiled.check_string("aaaaaa4uhi"))  # True
-    print(regex_compiled.check_string("4uhi"))        # True
-    print(regex_compiled.check_string("meow"))        # False
+def main():
+    parser = argparse.ArgumentParser(description="Simple FSM Regex Engine")
+    parser.add_argument("regex", help="Pattern (supports ., * and +)")
+    parser.add_argument("string", help="Input string")
+
+    args = parser.parse_args()
+
+    fsm = RegexFSM(args.regex)
+    print(fsm.check_string(args.string))
+
+
+if __name__ == "__main__":
+    main()
